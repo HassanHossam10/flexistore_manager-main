@@ -9,6 +9,7 @@ import '../auth/screens/login_screen.dart';
 import '../auth/data/auth_ffi.dart';
 import '../auth/data/session_ffi.dart';
 import '../dashboard/screens/dashboard_screen.dart';
+import '../inventory/screens/inventory_screen.dart';
 
 // ── Placeholder widgets for modules not yet implemented ──────────────────────
 class PosScreen extends StatelessWidget {
@@ -35,13 +36,7 @@ class InstallmentsScreen extends StatelessWidget {
   );
 }
 
-class InventoryScreen extends StatelessWidget {
-  const InventoryScreen({super.key});
-  @override
-  Widget build(BuildContext context) => const Center(
-    child: Text('Inventory Module', style: TextStyle(color: Colors.white, fontSize: 24)),
-  );
-}
+
 
 class TransactionsScreen extends StatelessWidget {
   const TransactionsScreen({super.key});
