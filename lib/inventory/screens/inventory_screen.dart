@@ -29,28 +29,104 @@ class _InventoryScreenState extends State<InventoryScreen> {
   void _showDeleteDialog(Product product) {
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
-        title: const Text('Delete Product', style: TextStyle(color: Colors.white)),
-        content: Text(
-          'Are you sure you want to delete ${product.name}?',
-          style: const TextStyle(color: Colors.white70),
+      barrierColor: Colors.black.withOpacity(0.5),
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: Container(
+          width: 450,
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: const Color(0xFF0F172A),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFF1E293B)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEF4444).withOpacity(0.2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.warning_amber_rounded, color: Color(0xFFEF4444), size: 24),
+                  ),
+                  const SizedBox(width: 16),
+                  const Text(
+                    'Delete product?',
+                    style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              RichText(
+                text: TextSpan(
+                  style: const TextStyle(color: Colors.white70, fontSize: 14, height: 1.5),
+                  children: [
+                    const TextSpan(text: 'Are you sure you want to delete "'),
+                    TextSpan(text: product.name, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                    const TextSpan(text: '"?\nThis action cannot be undone and will permanently remove this product from your system.'),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEF4444).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFEF4444).withOpacity(0.2)),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.warning_amber_rounded, color: Color(0xFFEF4444), size: 18),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'This will also delete all associated data including transaction history and analytics records.',
+                        style: TextStyle(color: const Color(0xFFEF4444).withOpacity(0.9), fontSize: 13, height: 1.4),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 32),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    style: TextButton.styleFrom(
+                      backgroundColor: const Color(0xFF1E293B),
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    child: const Text('Cancel', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                  ),
+                  const SizedBox(width: 12),
+                  ElevatedButton(
+                    onPressed: () async {
+                      Navigator.of(ctx).pop();
+                      await InventoryFFI.instance.deleteProduct(product.id);
+                      _refreshData();
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFEF4444),
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      elevation: 0,
+                    ),
+                    child: const Text('Delete product', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.of(ctx).pop();
-              await InventoryFFI.instance.deleteProduct(product.id);
-              _refreshData();
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFEF4444)),
-            child: const Text('Delete', style: TextStyle(color: Colors.white)),
-          ),
-        ],
       ),
     );
   }
@@ -58,102 +134,326 @@ class _InventoryScreenState extends State<InventoryScreen> {
   void _showProductFormDialog([Product? product]) {
     final isEditing = product != null;
     final nameCtrl = TextEditingController(text: product?.name ?? '');
-    final skuCtrl = TextEditingController(text: product?.sku ?? '');
-    final categoryCtrl = TextEditingController(text: product?.category ?? 'Electronics');
-    final stockCtrl = TextEditingController(text: product?.stock.toString() ?? '');
-    final priceCtrl = TextEditingController(text: product?.price.toString() ?? '');
-    int selectedTrend = product?.trend ?? 0;
+    final barcodeCtrl = TextEditingController(text: product?.sku ?? '');
+    final categoryCtrl = TextEditingController(text: product?.category ?? '');
+    final costPriceCtrl = TextEditingController(text: '');
+    final sellingPriceCtrl = TextEditingController(text: product?.price.toString() ?? '');
+    final initialQuantityCtrl = TextEditingController(text: product?.stock.toString() ?? '');
+    final lowStockThresholdCtrl = TextEditingController(text: '10');
 
     showDialog(
       context: context,
+      barrierColor: Colors.black.withOpacity(0.5),
       builder: (ctx) => StatefulBuilder(
         builder: (context, setDialogState) {
-          return AlertDialog(
-            backgroundColor: const Color(0xFF1E293B),
-            title: Text(isEditing ? 'Edit Product' : 'Add Product', style: const TextStyle(color: Colors.white)),
-            content: SingleChildScrollView(
+          return Dialog(
+            backgroundColor: Colors.transparent,
+            child: Container(
+              width: 550,
+              decoration: BoxDecoration(
+                color: const Color(0xFF0F172A),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFF1E293B)),
+              ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  TextField(
-                    controller: nameCtrl,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: const InputDecoration(labelText: 'Product Name', labelStyle: TextStyle(color: Colors.white54)),
+                  // Header
+                  Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFA855F7),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Icon(Icons.inventory_2_outlined, color: Colors.white, size: 20),
+                            ),
+                            const SizedBox(width: 16),
+                            Text(
+                              isEditing ? 'Edit Product' : 'Add New Product',
+                              style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                        IconButton(
+                          onPressed: () => Navigator.of(ctx).pop(),
+                          icon: const Icon(Icons.close, color: Colors.white54, size: 20),
+                          splashRadius: 20,
+                        ),
+                      ],
+                    ),
                   ),
-                  TextField(
-                    controller: skuCtrl,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: const InputDecoration(labelText: 'SKU', labelStyle: TextStyle(color: Colors.white54)),
-                  ),
-                  TextField(
-                    controller: categoryCtrl,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: const InputDecoration(labelText: 'Category', labelStyle: TextStyle(color: Colors.white54)),
-                  ),
-                  TextField(
-                    controller: stockCtrl,
-                    keyboardType: TextInputType.number,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: const InputDecoration(labelText: 'Stock', labelStyle: TextStyle(color: Colors.white54)),
-                  ),
-                  TextField(
-                    controller: priceCtrl,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    style: const TextStyle(color: Colors.white),
-                    decoration: const InputDecoration(labelText: 'Price', labelStyle: TextStyle(color: Colors.white54)),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      const Text('Trend: ', style: TextStyle(color: Colors.white54)),
-                      DropdownButton<int>(
-                        value: selectedTrend,
-                        dropdownColor: const Color(0xFF1E293B),
-                        style: const TextStyle(color: Colors.white),
-                        items: const [
-                          DropdownMenuItem(value: 1, child: Text('Up')),
-                          DropdownMenuItem(value: 0, child: Text('Neutral')),
-                          DropdownMenuItem(value: -1, child: Text('Down')),
+                  const Divider(color: Color(0xFF1E293B), height: 1, thickness: 1),
+                  
+                  // Form Fields
+                  Flexible(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildLabel('Product Name'),
+                          _buildTextField(nameCtrl, 'e.g., Samsung Galaxy S24'),
+                          const SizedBox(height: 20),
+
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _buildLabel('Barcode'),
+                                    _buildTextField(barcodeCtrl, '123456789012'),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _buildLabel('Category'),
+                                    Container(
+                                      height: 44,
+                                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF1E293B),
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: Border.all(color: const Color(0xFF334155)),
+                                      ),
+                                      child: DropdownButtonHideUnderline(
+                                        child: DropdownButton<String>(
+                                          value: categoryCtrl.text.isEmpty ? null : categoryCtrl.text,
+                                          hint: const Text('Select category', style: TextStyle(color: Colors.white54, fontSize: 14)),
+                                          dropdownColor: const Color(0xFF1E293B),
+                                          style: const TextStyle(color: Colors.white, fontSize: 14),
+                                          icon: const Icon(Icons.keyboard_arrow_down, color: Colors.white54, size: 16),
+                                          isExpanded: true,
+                                          items: ['Electronics', 'Audio', 'Accessories', 'Peripherals']
+                                              .map((String value) {
+                                            return DropdownMenuItem<String>(
+                                              value: value,
+                                              child: Text(value),
+                                            );
+                                          }).toList(),
+                                          onChanged: (val) {
+                                            if (val != null) setDialogState(() => categoryCtrl.text = val);
+                                          },
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 20),
+
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _buildLabel('Cost Price (\$)'),
+                                    _buildTextField(costPriceCtrl, '0.00'),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _buildLabel('Selling Price (\$)'),
+                                    _buildTextField(sellingPriceCtrl, '0.00'),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 20),
+
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _buildLabel('Initial Quantity'),
+                                    _buildTextField(initialQuantityCtrl, '0'),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _buildLabel('Low Stock Alert Threshold', isRequired: false),
+                                    _buildTextField(lowStockThresholdCtrl, '10'),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 24),
+
+                          // Warning Box
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF59E0B).withOpacity(0.05),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: const Color(0xFFF59E0B).withOpacity(0.2)),
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Icon(Icons.warning_amber_rounded, color: Color(0xFFF59E0B), size: 18),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Text('Important:', style: TextStyle(color: Color(0xFFF59E0B), fontSize: 13, fontWeight: FontWeight.bold)),
+                                      const SizedBox(height: 6),
+                                      _buildBullet('Ensure barcode is unique'),
+                                      const SizedBox(height: 4),
+                                      _buildBullet('Verify pricing before saving'),
+                                      const SizedBox(height: 4),
+                                      _buildBullet('Set appropriate low stock threshold'),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ],
-                        onChanged: (val) => setDialogState(() => selectedTrend = val ?? 0),
                       ),
-                    ],
+                    ),
+                  ),
+
+                  const Divider(color: Color(0xFF1E293B), height: 1, thickness: 1),
+                  
+                  // Actions
+                  Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: TextButton(
+                            onPressed: () => Navigator.of(ctx).pop(),
+                            style: TextButton.styleFrom(
+                              backgroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                            child: const Text('Cancel', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w600)),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: () async {
+                              final newProduct = Product(
+                                id: product?.id ?? 0,
+                                name: nameCtrl.text.isEmpty ? 'Unknown' : nameCtrl.text,
+                                sku: barcodeCtrl.text.isEmpty ? 'SKU-000' : barcodeCtrl.text,
+                                category: categoryCtrl.text.isEmpty ? 'Other' : categoryCtrl.text,
+                                stock: int.tryParse(initialQuantityCtrl.text) ?? 0,
+                                price: double.tryParse(sellingPriceCtrl.text) ?? 0.0,
+                                trend: product?.trend ?? 0,
+                              );
+
+                              Navigator.of(ctx).pop();
+                              if (isEditing) {
+                                await InventoryFFI.instance.updateProduct(newProduct);
+                              } else {
+                                await InventoryFFI.instance.addProduct(newProduct);
+                              }
+                              _refreshData();
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFFA855F7), // Purple
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              elevation: 0,
+                            ),
+                            child: Text(isEditing ? 'Save Changes' : 'Add Product', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
             ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(ctx).pop(),
-                child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
-              ),
-              ElevatedButton(
-                onPressed: () async {
-                  final newProduct = Product(
-                    id: product?.id ?? 0,
-                    name: nameCtrl.text.isEmpty ? 'Unknown' : nameCtrl.text,
-                    sku: skuCtrl.text.isEmpty ? 'SKU-000' : skuCtrl.text,
-                    category: categoryCtrl.text.isEmpty ? 'Other' : categoryCtrl.text,
-                    stock: int.tryParse(stockCtrl.text) ?? 0,
-                    price: double.tryParse(priceCtrl.text) ?? 0.0,
-                    trend: selectedTrend,
-                  );
-
-                  Navigator.of(ctx).pop();
-                  if (isEditing) {
-                    await InventoryFFI.instance.updateProduct(newProduct);
-                  } else {
-                    await InventoryFFI.instance.addProduct(newProduct);
-                  }
-                  _refreshData();
-                },
-                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFA855F7)),
-                child: const Text('Save', style: TextStyle(color: Colors.white)),
-              ),
-            ],
           );
         }
       ),
+    );
+  }
+
+  Widget _buildLabel(String text, {bool isRequired = true}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: RichText(
+        text: TextSpan(
+          text: text,
+          style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
+          children: isRequired
+              ? [const TextSpan(text: ' *', style: TextStyle(color: Color(0xFFEF4444)))]
+              : [],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTextField(TextEditingController controller, String hintText) {
+    return SizedBox(
+      height: 44,
+      child: TextField(
+        controller: controller,
+        style: const TextStyle(color: Colors.white, fontSize: 14),
+        decoration: InputDecoration(
+          hintText: hintText,
+          hintStyle: const TextStyle(color: Colors.white54, fontSize: 14),
+          filled: true,
+          fillColor: const Color(0xFF1E293B),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: const BorderSide(color: Color(0xFF334155)),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: const BorderSide(color: Color(0xFF334155)),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: const BorderSide(color: Color(0xFFA855F7)),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBullet(String text) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Container(width: 4, height: 4, decoration: const BoxDecoration(color: Color(0xFFF59E0B), shape: BoxShape.circle)),
+        const SizedBox(width: 8),
+        Text(text, style: const TextStyle(color: Color(0xFFF59E0B), fontSize: 12)),
+      ],
     );
   }
 
